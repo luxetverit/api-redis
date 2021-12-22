@@ -16,41 +16,10 @@ client.auth('delynet1234');
 client.on('error', (err) => {
     console.log('redis error ' + err);
 });
-
 const resultok = '{"resultcode":"1a","resultdesc":"ok"}';
 
 app.get('/', function (req, res) {
     return res.send('hello');
-});
-app.get('/SearchQueueCount', function (req, res) {
-    //console.log(req.query.a)
-    let servername = req.query.a;
-    console.log(servername);
-    if (servername == '') {
-        return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
-    }
-    client.get(servername, function (err, val) {
-        if (err) throw err;
-        //console.log('result: ' + servername + '=' + val)
-        return res.send(resultok);
-    });
-});
-
-app.get('/UpdateQueueCount', function (req, res) {
-    //console.log(req.query.a)
-    const obj = JSON.parse(req.query.a);
-    //console.log(obj)
-    const servername = obj.servername;
-    const count = obj.count;
-    //console.log(servername + '=' + count)
-    if (!servername) {
-        return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
-    }
-
-    client.set(servername, count, function (err) {
-        if (err) throw err;
-        return res.send('done');
-    });
 });
 
 app.get('/facredis/searchdata1', function (req, res) {
@@ -81,16 +50,25 @@ app.get('/facredis/searchdata1', function (req, res) {
 });
 
 app.post('/facredis/adddata', function (req, res) {
-    let obj = JSON.parse(req.body.a);
-    const inkey = obj.key;
-    const invalue = obj.value;
+    var reqquery = req.query.a;
+
+    if (!reqquery) {
+        //데이터가 POSTMAN 전송시 body, vb6 전송시 query에 담겨서 오기에 구분처리
+        var obj = JSON.parse(req.body.a);
+    } else {
+        var obj = JSON.parse(req.query.a);
+    }
+
+    let inkey = obj.key;
+    let invalue = obj.value;
     let expiretime = obj.expiretime;
 
     if (!inkey || !invalue) {
         return res.send('empty parameter');
     }
-    if (expiretime == 0) {
-        client.set(faxno, key, function (err) {
+    if (expiretime == '0') {
+        //expiretime 값이 없을 시 데이터 무제한 저장
+        client.set(inkey, invalue, function (err) {
             if (err) throw err;
             return res.send(resultok);
         });
@@ -104,22 +82,15 @@ app.post('/facredis/adddata', function (req, res) {
 
 app.get('/facredis/deletedata', function (req, res) {
     const obj = JSON.parse(req.query.a);
-    const faxno = obj.faxno;
+    const inkey = obj.inkey;
 
-    if (!faxno) {
+    if (!inkey) {
         return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
     }
 
-    client.del(faxno, function (err) {
+    client.del(inkey, function (err) {
         if (err) throw err;
         return res.send(resultok);
-    });
-});
-
-app.get('/SearchAllKeys', function (req, res) {
-    client.keys('*', function (err, val) {
-        if (err) throw err;
-        return res.send(val);
     });
 });
 
@@ -136,7 +107,8 @@ app.get('/facredis/searchdata', function (req, res) {
     const inkey = obj.key;
     var inlikeyn = obj.likeyn;
     //return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
-    if (inlikeyn == 'n') {
+    //단건조회
+    if (inlikeyn == 'N' || inlikeyn == 'n') {
         client.get(inkey, function (err, val) {
             if (err) throw err;
             //console.log('result: ' + servername + '=' + val)
@@ -153,24 +125,38 @@ app.get('/facredis/searchdata', function (req, res) {
                 });
             }
         });
-    } else if (inlikeyn == 'y') {
+        // LIKE 검색 (결과 데이터 여러개)
+    } else if (inlikeyn == 'y' || inlikeyn == 'Y') {
         client.keys(inkey + '*', function (err, keys) {
+            // LIKE 조회해서 모든 값 출력 (inkey = 조회할 때 입력하는 값, keys = inkey* 로 검색된 LIKE 검색 결과)
             if (err) throw err;
             if (keys) {
                 async.map(
+                    //async.map(조회된 모든키값, function(콜백), function(결과))
+                    //like겁색으로 검색된 모든 키값들(keys)을 map합수(반복문), 콜백 함수를 이용해서
+                    //key : value 1:1매칭하고 결과를 배열(results)로 반환
+                    //async(비동기 함수->동기적 함수), .map 함수를 사용하여 위에서 출력된 key값과 value 1:1 매칭
                     keys,
                     function (key, callback) {
+                        //value를 가져오기 위한 콜백함수, 조회된 key가 없을때까지 동작
+                        var job = {}; // 결과를 담는 객체
                         client.get(key, function (err, value) {
+                            // key값과 value 매칭
                             if (err) throw err;
-                            var job = {};
                             job['key'] = key;
                             job['value'] = value;
+                        });
+                        client.ttl(key, function (err, ttl) {
+                            // key값과 ttl (expiretime) 매칭
+                            if (err) throw err;
+                            job['expiretime'] = ttl;
                             callback(null, job);
                         });
                     },
                     function (err, results) {
+                        //map과 callback 함수 통과한 결과값 JSON 배열로 리턴
                         if (err) throw err;
-                        console.log(results.length);
+                        //console.log(results.length);
                         if (results.length == '0') {
                             return res.send(
                                 '{"resultcode":"91","resultdesc":"not found data"}'
