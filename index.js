@@ -3,7 +3,7 @@ const cors = require('cors');
 const JSON = require('JSON');
 const app = express();
 const redis = require('redis');
-const client = redis.createClient(6379, '58.180.90.33');
+const client = redis.createClient($PORT, '$IP');
 const port = 3000;
 const async = require('async');
 
@@ -12,7 +12,7 @@ app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-client.auth('delynet1234');
+client.auth('$PASSWORD');
 client.on('error', (err) => {
     console.log('redis error ' + err);
 });
