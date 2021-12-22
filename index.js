@@ -22,33 +22,6 @@ app.get('/', function (req, res) {
     return res.send('hello');
 });
 
-app.get('/facredis/searchdata1', function (req, res) {
-    const obj = JSON.parse(req.query.a);
-    //console.log(obj.faxno);
-    const faxno = obj.faxno;
-    //console.log(servername + '=' + count)
-    if (faxno == '') {
-        return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
-    }
-    if (isNaN(faxno)) {
-        return res.send(
-            '{"resultcode":"91","resultdesc":"incorrect data(required only number)"}'
-        );
-    }
-
-    client.get(faxno, function (err, val) {
-        if (err) throw err;
-        //console.log('result: ' + servername + '=' + val)
-        if (!val) {
-            return res.send(
-                '{"resultcode":"91","resultdesc":"not found data"}'
-            );
-        } else {
-            return res.send(resultok);
-        }
-    });
-});
-
 app.post('/facredis/adddata', function (req, res) {
     var reqquery = req.query.a;
 
@@ -175,8 +148,12 @@ app.get('/facredis/searchdata', function (req, res) {
     } else {
         return res.send('{"resultcode":"91","resultdesc":"not found data"}');
     }
+});
 
-    /* client.keys(pattern, function (err, keys) {
+app.listen(port, function () {
+    console.log('server on ' + 'port' + port);
+});
+/* client.keys(pattern, function (err, keys) {
         if (err) return console.log(err);
         var result = [];
         for (var i = 0, len = keys.length; i < len; i++) {
@@ -186,7 +163,7 @@ app.get('/facredis/searchdata', function (req, res) {
         return res.send(JSON.stringify(result));
     }); */
 
-    /* console.log(inkey + ' ' + pattern);
+/* console.log(inkey + ' ' + pattern);
     const scanAll = async (pattern) => {
         const scan = util.promisify(client.scan).bind(client);
         const result = [];
@@ -198,7 +175,7 @@ app.get('/facredis/searchdata', function (req, res) {
         } while (cursor !== '0');
         return result;
     }; */
-    /* function scan(inpattern, callback) {
+/* function scan(inpattern, callback) {
         client.scan(cursor, 'MATCH', pattern + '*', function (err, reply) {
             if (err) throw err;
 
@@ -212,13 +189,36 @@ app.get('/facredis/searchdata', function (req, res) {
             }
         });
     } */
+
+/*
+
+app.get('/facredis/searchdata1', function (req, res) {
+    const obj = JSON.parse(req.query.a);
+    //console.log(obj.faxno);
+    const faxno = obj.faxno;
+    //console.log(servername + '=' + count)
+    if (faxno == '') {
+        return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
+    }
+    if (isNaN(faxno)) {
+        return res.send(
+            '{"resultcode":"91","resultdesc":"incorrect data(required only number)"}'
+        );
+    }
+
+    client.get(faxno, function (err, val) {
+        if (err) throw err;
+        //console.log('result: ' + servername + '=' + val)
+        if (!val) {
+            return res.send(
+                '{"resultcode":"91","resultdesc":"not found data"}'
+            );
+        } else {
+            return res.send(resultok);
+        }
+    });
 });
 
-app.listen(port, function () {
-    console.log('server on ' + 'port' + port);
-});
-
-/* 
 app.post('/test', function (req, res) {
     var a = req.query.a
     console.log('post')
