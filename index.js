@@ -3,22 +3,24 @@ const cors = require('cors');
 const JSON = require('JSON');
 const app = express();
 const redis = require('redis');
-const client = redis.createClient($PORT, '$IP');
+const client = redis.createClient(6379, '58.180.90.33');
 const port = 3000;
 const async = require('async');
+const { logger } = require('./logger');
 
 app.use(cors());
 //app.options('*', cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-client.auth('$PASSWORD');
+client.auth('delynet1234');
 client.on('error', (err) => {
     console.log('redis error ' + err);
 });
 const resultok = '{"resultcode":"1a","resultdesc":"ok"}';
 
 app.get('/', function (req, res) {
+    logger.info('test');
     return res.send('hello');
 });
 
@@ -28,8 +30,10 @@ app.post('/facredis/adddata', function (req, res) {
     if (!reqquery) {
         //데이터가 POSTMAN 전송시 body, vb6 전송시 query에 담겨서 오기에 구분처리
         var obj = JSON.parse(req.body.a);
+        logger.info('adddata?a=' + req.body.a);
     } else {
         var obj = JSON.parse(req.query.a);
+        logger.info('adddata?a=' + req.query.a);
     }
 
     let inkey = obj.key;
@@ -41,13 +45,15 @@ app.post('/facredis/adddata', function (req, res) {
     }
     if (expiretime == '0') {
         //expiretime 값이 없을 시 데이터 무제한 저장
-        client.set(inkey, invalue, function (err) {
+        client.set(inkey, invalue, function (err, val) {
             if (err) throw err;
+            logger.info('redis adddata return value : ' + val);
             return res.send(resultok);
         });
     } else {
-        client.setex(inkey, expiretime, invalue, function (err) {
+        client.setex(inkey, expiretime, invalue, function (err, val) {
             if (err) throw err;
+            logger.info('redis adddata return value : ' + val);
             return res.send(resultok);
         });
     }
@@ -56,7 +62,7 @@ app.post('/facredis/adddata', function (req, res) {
 app.get('/facredis/deletedata', function (req, res) {
     const obj = JSON.parse(req.query.a);
     const inkey = obj.inkey;
-
+    logger.info(req.query.a);
     if (!inkey) {
         return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
     }
@@ -71,6 +77,7 @@ app.get('/facredis/cleardata', function (req, res) {
     const key = res.query.a;
     client.flushall(function (err, val) {
         if (err) throw err;
+        logger.error(err);
         return res.send(resultok);
     });
 });
@@ -79,6 +86,7 @@ app.get('/facredis/searchdata', function (req, res) {
     const obj = JSON.parse(req.query.a);
     const inkey = obj.key;
     var inlikeyn = obj.likeyn;
+    logger.info('searchdata?a=' + req.query.a);
     //return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
     //단건조회
     if (inlikeyn == 'N' || inlikeyn == 'n') {
@@ -87,9 +95,11 @@ app.get('/facredis/searchdata', function (req, res) {
             //console.log('result: ' + servername + '=' + val)
             if (!val) {
                 console.log(val);
-                return res.send(
-                    '{"resultcode":"91","resultdesc":"not found data"}'
-                );
+                return res.send({
+                    resultcode: '91',
+                    resultdesc: 'not found data',
+                    resultdata: '',
+                });
             } else {
                 return res.send({
                     resultcode: '1a',
@@ -131,9 +141,11 @@ app.get('/facredis/searchdata', function (req, res) {
                         if (err) throw err;
                         //console.log(results.length);
                         if (results.length == '0') {
-                            return res.send(
-                                '{"resultcode":"91","resultdesc":"not found data"}'
-                            );
+                            return res.send({
+                                resultcode: '91',
+                                resultdesc: 'not found data',
+                                resultdata: '',
+                            });
                         } else {
                             return res.send({
                                 resultcode: '1a',
@@ -146,7 +158,11 @@ app.get('/facredis/searchdata', function (req, res) {
             }
         });
     } else {
-        return res.send('{"resultcode":"91","resultdesc":"not found data"}');
+        return res.send({
+            resultcode: '91',
+            resultdesc: 'not found data',
+            resultdata: '',
+        });
     }
 });
 
