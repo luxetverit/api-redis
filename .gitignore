@@ -1,1 +1,5 @@
+.gitignore
+gitignore
 node_modules
+/logs
+redis-config.json

@@ -3,7 +3,7 @@ const cors = require('cors');
 const JSON = require('JSON');
 const app = express();
 const redis = require('redis');
-
+const redis_config = require('./redis-config.json');
 const port = 3000;
 const async = require('async');
 const { logger } = require('./logger');
@@ -13,9 +13,13 @@ app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+const client = redis.createClient(redis_config.port, redis_config.host);
+const multi = client.multi();
+client.auth(redis_config.auth);
 client.on('error', (err) => {
     console.log('redis error ' + err);
 });
+
 const resultok = '{"resultcode":"1a","resultdesc":"ok"}';
 
 app.get('/', function (req, res) {
@@ -40,27 +44,50 @@ app.post('/facredis/adddata', function (req, res) {
     let expiretime = obj.expiretime;
 
     if (!inkey || !invalue) {
-        return res.send('empty parameter');
+        return res.send({
+            resultcode: '91',
+            resultdesc: 'empty parameter',
+            resultdata: '',
+        });
     }
+
     if (expiretime == '0') {
         //expiretime 값이 없을 시 데이터 무제한 저장
-        client.set(inkey, invalue, function (err, val) {
+        multi.set(inkey, invalue).exec(function (err, result) {
             if (err) throw err;
-            logger.info('redis adddata return value : ' + val);
+            logger.info('redis adddata return value : ' + result);
             return res.send(resultok);
+        });
+    } else if (expiretime == '') {
+        return res.send({
+            resultcode: '91',
+            resultdesc: 'empty parameter',
+            resultdata: '',
         });
     } else {
-        client.setex(inkey, expiretime, invalue, function (err, val) {
-            if (err) throw err;
-            logger.info('redis adddata return value : ' + val);
-            return res.send(resultok);
-        });
+        multi
+            .set(inkey, invalue, 'EX', expiretime, 'NX')
+            .exec(function (err, result) {
+                if (err) throw err;
+                //logger.info('result : ' + result);
+                if (result == '') {
+                    logger.info('redis adddata return value : FAIL');
+                    return res.send({
+                        resultcode: '94',
+                        resultdesc: 'duplication key',
+                        resultdata: '',
+                    });
+                } else {
+                    logger.info('redis adddata return value : ' + result);
+                    return res.send(resultok);
+                }
+            });
     }
 });
 
 app.get('/facredis/deletedata', function (req, res) {
     const obj = JSON.parse(req.query.a);
-    const inkey = obj.inkey;
+    const inkey = obj.key;
     logger.info(req.query.a);
     if (!inkey) {
         return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
