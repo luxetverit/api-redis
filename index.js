@@ -9,7 +9,6 @@ const async = require('async');
 const { logger } = require('./logger');
 
 app.use(cors());
-//app.options('*', cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
@@ -53,6 +52,7 @@ app.post('/facredis/adddata', function (req, res) {
 
     if (expiretime == '0') {
         //expiretime 값이 없을 시 데이터 무제한 저장
+        //multi -> transaction 시작 // exec -> commit & excute
         multi.set(inkey, invalue).exec(function (err, result) {
             if (err) throw err;
             logger.info('redis adddata return value : ' + result);
@@ -65,8 +65,8 @@ app.post('/facredis/adddata', function (req, res) {
             resultdata: '',
         });
     } else {
-        multi
-            .set(inkey, invalue, 'EX', expiretime, 'NX')
+        multi //multi -> transaction 시작 // exec -> commit & excute
+            .set(inkey, invalue, 'EX', expiretime, 'NX') // set(key, value, 'EX'(expiretime key), second(expiretime value), 'NX'(insert if exist))
             .exec(function (err, result) {
                 if (err) throw err;
                 //logger.info('result : ' + result);
