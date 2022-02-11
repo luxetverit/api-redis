@@ -19,7 +19,7 @@ client.on('error', (err) => {
     console.log('redis error ' + err);
 });
 
-const resultok = '{"resultcode":"1a","resultdesc":"ok"}';
+const resultok = '{"resultcode":"1a","resultdesc":"ok","resultdata":[]}';
 
 app.get('/', function (req, res) {
     logger.info('test');
@@ -44,12 +44,11 @@ app.post('/facredis/adddata', function (req, res) {
 
     if (!inkey || !invalue) {
         return res.send({
-            resultcode: '91',
+            resultcode: '9a',
             resultdesc: 'empty parameter',
             resultdata: '',
         });
     }
-
     if (expiretime == '0') {
         //expiretime 값이 없을 시 데이터 무제한 저장
         //multi -> transaction 시작 // exec -> commit & excute
@@ -60,7 +59,7 @@ app.post('/facredis/adddata', function (req, res) {
         });
     } else if (expiretime == '') {
         return res.send({
-            resultcode: '91',
+            resultcode: '9a',
             resultdesc: 'empty parameter',
             resultdata: '',
         });
@@ -68,14 +67,29 @@ app.post('/facredis/adddata', function (req, res) {
         multi //multi -> transaction 시작 // exec -> commit & excute
             .set(inkey, invalue, 'EX', expiretime, 'NX') // set(key, value, 'EX'(expiretime key), second(expiretime value), 'NX'(insert if exist))
             .exec(function (err, result) {
-                if (err) throw err;
+                if (err) {
+                    logger.info(
+                        'redis adddata return value : FAIL(err : ' + err + ')'
+                    );
+                    getRedisData(inkey, function (result) {
+                        return res.send({
+                            resultcode: '9z',
+                            resultdesc: 'ok',
+                            resultdata: result,
+                        });
+                    });
+                }
                 //logger.info('result : ' + result);
                 if (result == '') {
-                    logger.info('redis adddata return value : FAIL');
-                    return res.send({
-                        resultcode: '94',
-                        resultdesc: 'duplication key',
-                        resultdata: '',
+                    logger.info(
+                        'redis adddata return value : FAIL(duplication key)'
+                    );
+                    getRedisData(inkey, function (results) {
+                        return res.send({
+                            resultcode: '9y',
+                            resultdesc: 'ok',
+                            resultdata: results,
+                        });
                     });
                 } else {
                     logger.info('redis adddata return value : ' + result);
@@ -90,7 +104,11 @@ app.get('/facredis/deletedata', function (req, res) {
     const inkey = obj.key;
     logger.info(req.query.a);
     if (!inkey) {
-        return res.send('{"resultcode":"91","resultdesc":"empty parameter"}');
+        return res.send({
+            resultcode: '9a',
+            resultdesc: 'empty parameter',
+            resultdata: '',
+        });
     }
 
     client.del(inkey, function (err) {
@@ -122,7 +140,7 @@ app.get('/facredis/searchdata', function (req, res) {
             if (!val) {
                 console.log(val);
                 return res.send({
-                    resultcode: '91',
+                    resultcode: '9a',
                     resultdesc: 'not found data',
                     resultdata: '',
                 });
@@ -136,61 +154,62 @@ app.get('/facredis/searchdata', function (req, res) {
         });
         // LIKE 검색 (결과 데이터 여러개)
     } else if (inlikeyn == 'y' || inlikeyn == 'Y') {
-        client.keys(inkey + '*', function (err, keys) {
-            // LIKE 조회해서 모든 값 출력 (inkey = 조회할 때 입력하는 값, keys = inkey* 로 검색된 LIKE 검색 결과)
-            if (err) throw err;
-            if (keys) {
-                async.map(
-                    //async.map(조회된 모든키값, function(콜백), function(결과))
-                    //like겁색으로 검색된 모든 키값들(keys)을 map합수(반복문), 콜백 함수를 이용해서
-                    //key : value 1:1매칭하고 결과를 배열(results)로 반환
-                    //async(비동기 함수->동기적 함수), .map 함수를 사용하여 위에서 출력된 key값과 value 1:1 매칭
-                    keys,
-                    function (key, callback) {
-                        //value를 가져오기 위한 콜백함수, 조회된 key가 없을때까지 동작
-                        var job = {}; // 결과를 담는 객체
-                        client.get(key, function (err, value) {
-                            // key값과 value 매칭
-                            if (err) throw err;
-                            job['key'] = key;
-                            job['value'] = value;
-                        });
-                        client.ttl(key, function (err, ttl) {
-                            // key값과 ttl (expiretime) 매칭
-                            if (err) throw err;
-                            job['expiretime'] = ttl;
-                            callback(null, job);
-                        });
-                    },
-                    function (err, results) {
-                        //map과 callback 함수 통과한 결과값 JSON 배열로 리턴
-                        if (err) throw err;
-                        //console.log(results.length);
-                        if (results.length == '0') {
-                            return res.send({
-                                resultcode: '91',
-                                resultdesc: 'not found data',
-                                resultdata: '',
-                            });
-                        } else {
-                            return res.send({
-                                resultcode: '1a',
-                                resultdesc: 'ok',
-                                resultdata: results,
-                            });
-                        }
-                    }
-                );
-            }
+        getRedisData(inkey + '*', function (results) {
+            return res.send({
+                resultcode: '1a',
+                resultdesc: 'ok',
+                resultdata: results,
+            });
         });
     } else {
         return res.send({
-            resultcode: '91',
+            resultcode: '9a',
             resultdesc: 'not found data',
             resultdata: '',
         });
     }
 });
+
+function getRedisData(inkey, callback) {
+    client.keys(inkey, function (err, keys) {
+        // LIKE 조회해서 모든 값 출력 (inkey = 조회할 때 입력하는 값, keys = inkey* 로 검색된 LIKE 검색 결과)
+        if (err) throw err;
+        if (keys) {
+            async.map(
+                //async.map(조회된 모든키값, function(콜백), function(결과))
+                //like겁색으로 검색된 모든 키값들(keys)을 map합수(반복문), 콜백 함수를 이용해서
+                //key : value 1:1매칭하고 결과를 배열(results)로 반환
+                //async(비동기 함수->동기적 함수), .map 함수를 사용하여 위에서 출력된 key값과 value 1:1 매칭
+                keys,
+                function (key, callback) {
+                    //value를 가져오기 위한 콜백함수, 조회된 key가 없을때까지 동작
+                    var job = {}; // 결과를 담는 객체
+                    client.get(key, function (err, value) {
+                        // key값과 value 매칭
+                        if (err) throw err;
+                        job['key'] = key;
+                        job['value'] = value;
+                    });
+                    client.ttl(key, function (err, ttl) {
+                        // key값과 ttl (expiretime) 매칭
+                        if (err) throw err;
+                        job['expiretime'] = ttl;
+                        callback(null, job);
+                    });
+                },
+                function (err, results) {
+                    //map과 callback 함수 통과한 결과값 JSON 배열로 리턴
+                    if (err) throw err;
+                    //console.log(results.length);
+                    if (results.length == '0') {
+                    } else {
+                        callback(results);
+                    }
+                }
+            );
+        }
+    });
+}
 
 app.listen(port, function () {
     console.log('server on ' + 'port' + port);
