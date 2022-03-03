@@ -89,7 +89,7 @@ app.post('/facredis/adddata', function (req, res) {
                         },
                         function (err, results) {
                             if (err) throw err;
-                            // 중복 키 있음, insert  실패, 중복 키&밸류&ttl 리턴
+                            // 중복 키 있음, insert  실패, 중복 key, value, ttl 리턴
                             return res.send({
                                 resultcode: '9y',
                                 resultdesc: 'ok',
